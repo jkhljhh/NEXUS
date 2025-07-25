@@ -85,7 +85,7 @@ const onUploadSubmit = async (data: UploadFolderValues) => {
   startTransition(async () => {
     const supabase = createClient();
     
-    // 1. Get the current user's information
+    // 1. Get the authenticated user from Supabase Auth
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -93,22 +93,46 @@ const onUploadSubmit = async (data: UploadFolderValues) => {
       return;
     }
 
+    // 2. Use the auth UUID to find the profile in your custom 'user' table
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user")
+      .select("user_id, name") // Select the numeric ID and name
+      .eq("email", user.email) // IMPORTANT: Assumes this column links to the auth UUID
+      .single();
+    
+
+    if (profileError || !userProfile) {
+      toast.error("Could not find user profile.");
+      return;
+    }
+
+
     const folderName = data.name;
     const filesArray = Array.from(filesToUpload);
     let successfulUploads = 0;
 
     // Create the folder record in the database
-    const { data: folderData, error: folderError } = await supabase
+   const { error: folderInsertError } = await supabase
       .from("folder")
       .insert({
         name: folderName,
         created_at: new Date().toISOString(),
-      })
-      .select()
+      });
+
+    if (folderInsertError) {
+      toast.error("Failed to create folder. A folder with this name may already exist.");
+      return;
+    }
+
+    // Step 2: Now, fetch the ID of the folder you just created.
+    const { data: folderData, error: folderFetchError } = await supabase
+      .from("folder")
+      .select("id")
+      .eq("name", folderName)
       .single();
 
-    if (folderError) {
-      toast.error("Failed to create folder. It might already exist.");
+    if (folderFetchError || !folderData) {
+      toast.error("Error fetching the new folder ID. Please try again.");
       return;
     }
 
@@ -139,7 +163,7 @@ const onUploadSubmit = async (data: UploadFolderValues) => {
         url: publicUrl,
         folder_id: folderData.id,
         file_size: `${(file.size / 1024).toFixed(2)} KB`,
-        uploaded_by_user_id: user.id,
+        uploaded_by_user_id: userProfile.user_id,
         uploaded_by_user_name: user.user_metadata?.full_name || user.email, // Fallback to email if name is not set
       });
 
