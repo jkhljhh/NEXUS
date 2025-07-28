@@ -510,7 +510,7 @@ const filteredAndSortedFiles = useMemo(() => {
            <Button 
       onClick={handleBulkSendToChat} 
       disabled={isSendingToChat}
-      variant="outline"
+      
     >
       {isSendingToChat ? "Sending..." : "Send to Chat"}
     </Button>
